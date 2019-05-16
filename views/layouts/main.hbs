@@ -30,6 +30,15 @@
   </head>
 
   <body>
+    <nav class="navbar is-primary">
+      <div class="navbar-menu">
+        <div class="navbar-start">
+          <a class="navbar-item {{#if nav.counter}}is-active{{/if}}" href="/counter">Counter</a>
+          <a class="navbar-item {{#if nav.modal}}is-active{{/if}}" href="/dialog">Dialog</a>
+        </div>
+      </div>
+    </nav>
+
     {{{body}}}
   </body>
 </html>

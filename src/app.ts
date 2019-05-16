@@ -41,6 +41,7 @@ app.set('view engine', '.hbs');
 app.use(precompiledPartials(exphbs));
 
 app.use('/', counterRoutes);
+app.use('/counter', counterRoutes);
 
 app.use((_req, _res, next) => {
   next(new StatusError('Not Found', 404));
