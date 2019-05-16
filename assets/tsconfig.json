@@ -1,9 +1,8 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "module": "esnext",
     "lib": ["es6", "dom"],
     "target": "es5",
-    "types": ["socket.io-client"]
+    "types": ["socket.io-client", "handlebars", "morphdom"]
   }
 }

@@ -17,6 +17,15 @@
       <script src="http://localhost:35729/livereload.js"></script>
     {{/if}}
 
+    <script defer>
+      (function() {
+        var globals = window.application = window.application || {};
+        var precompiled = globals.precompiled = globals.precompiled || {};
+        {{#each precompiledPartials}}
+          precompiled['{{@key}}'] = {{{this}}};
+        {{/each}}
+      })();
+    </script>
     <script defer src="/build/main.js"></script>
   </head>
 

@@ -47,7 +47,7 @@ async function main() {
   const livereloadServer = livereload.createServer({ exts: ['hbs'] });
   livereloadServer.watch([path.resolve(rootDir, 'views/')]);
 
-  const bundler = new Bundler('assets/js/main.ts', {
+  const bundler = new Bundler('assets/ts/main.ts', {
     outDir: path.resolve(rootDir, 'public/build/'),
     publicUrl: './'
   });

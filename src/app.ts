@@ -1,13 +1,26 @@
 import compression from 'compression';
 import path from 'path';
 import express, { NextFunction, Request, Response } from 'express';
-import exphbs from 'express-handlebars';
+import ExpressHandlebars from 'express-handlebars';
+import Handlebars from 'handlebars';
 import helmet from 'helmet';
 import logger from 'morgan';
 import favicon from 'serve-favicon';
 import { getStatusText } from 'http-status-codes';
+import LiveRender from './live-render';
 import { StatusError } from './errors';
 import counterRoutes from './counter/router';
+import precompiledPartials from './middleware/precompiled-partials';
+
+const handlebars = Handlebars.create();
+LiveRender({ handlebars });
+
+const exphbs = ExpressHandlebars.create({
+  defaultLayout: 'main.hbs',
+  handlebars,
+  extname: '.hbs',
+  partialsDir: path.resolve(__dirname, '../views/partials'),
+});
 
 const app = express();
 
@@ -22,8 +35,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use(logger('dev'));
 app.use(express.static(path.resolve(__dirname, '../public')));
 
-app.engine('.hbs', exphbs({ extname: '.hbs' }));
+app.engine('.hbs', exphbs.engine);
 app.set('view engine', '.hbs');
+
+app.use(precompiledPartials(exphbs));
 
 app.use('/', counterRoutes);
 
@@ -42,7 +57,7 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
   res.status(statusCode).render('error', {
     error: ['development', 'test'].includes(env) ? err : {},
     statusCode,
-    statusText: getStatusText(statusCode)
+    statusText: getStatusText(statusCode),
   });
 });
 
