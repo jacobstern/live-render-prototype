@@ -7,7 +7,7 @@ import logger from 'morgan';
 import favicon from 'serve-favicon';
 import { getStatusText } from 'http-status-codes';
 import { StatusError } from './errors';
-import searchRouter from './search/router';
+import counterRoutes from './counter/router';
 
 const app = express();
 
@@ -25,7 +25,7 @@ app.use(express.static(path.resolve(__dirname, '../public')));
 app.engine('.hbs', exphbs({ extname: '.hbs' }));
 app.set('view engine', '.hbs');
 
-app.use('/', searchRouter);
+app.use('/', counterRoutes);
 
 app.use((_req, _res, next) => {
   next(new StatusError('Not Found', 404));
