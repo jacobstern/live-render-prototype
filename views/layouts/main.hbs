@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Live Render Prototype</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.4/css/bulma.min.css">
+    <script defer src="https://use.fontawesome.com/releases/v5.8.2/js/all.js" integrity="sha384-DJ25uNYET2XCl5ZF++U8eNxPWqcKohUUBUpKGlNLMchM7q4Wjg2CUpjHLaL8yYPH" crossorigin="anonymous"></script>
+
+    {{!-- Include livereload script for automatic code reloading in development --}}
+    {{#if env.development}}
+      <script src="http://localhost:35729/livereload.js"></script>
+    {{/if}}
+
+    <script defer src="/build/main.js"></script>
+  </head>
+
+  <body>
+    {{{body}}}
+  </body>
+</html>
