@@ -2,7 +2,13 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Live Render Prototype</title>
+    <title>
+      {{#if title}}
+        {{title}} — Live Render Prototype
+      {{else}}
+        Live Render Prototype
+      {{/if}}
+    </title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.4/css/bulma.min.css">
     <script defer src="https://use.fontawesome.com/releases/v5.8.2/js/all.js" integrity="sha384-DJ25uNYET2XCl5ZF++U8eNxPWqcKohUUBUpKGlNLMchM7q4Wjg2CUpjHLaL8yYPH" crossorigin="anonymous"></script>
 

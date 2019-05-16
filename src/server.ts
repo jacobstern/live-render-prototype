@@ -1,11 +1,15 @@
+import http from 'http';
 import env from 'getenv';
 import app from './app';
+import { useSocketIO } from './io';
 
 async function main() {
+  const server = new http.Server(app);
+  useSocketIO(server);
+
   const port = env.int('PORT', 3000);
-  const server = app.listen(port, () => {
-    // @ts-ignore
-    console.log('Express server listening on port ' + server.address().port);
+  server.listen(port, () => {
+    console.log('Express server listening on port ' + port);
   });
 }
 
