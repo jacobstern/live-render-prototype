@@ -49,8 +49,8 @@ class DefaultInstance implements LiveRenderInstance {
   }
 }
 
-export function createInstance(options: LiveRenderOptions): LiveRenderInstance {
+export function create(options: LiveRenderOptions): LiveRenderInstance {
   return new DefaultInstance(options);
 }
 
-export default createInstance;
+export default create;

@@ -7,13 +7,12 @@ import helmet from 'helmet';
 import logger from 'morgan';
 import favicon from 'serve-favicon';
 import { getStatusText } from 'http-status-codes';
-import LiveRender from './live-render';
+import liveRenderExpress from './live-render-express';
 import { StatusError } from './errors';
 import counterRoutes from './counter/router';
 import precompiledPartials from './middleware/precompiled-partials';
 
 const handlebars = Handlebars.create();
-LiveRender({ handlebars });
 
 const exphbs = ExpressHandlebars.create({
   defaultLayout: 'main.hbs',
@@ -39,6 +38,8 @@ app.engine('.hbs', exphbs.engine);
 app.set('view engine', '.hbs');
 
 app.use(precompiledPartials(exphbs));
+
+app.use(liveRenderExpress());
 
 app.use('/', counterRoutes);
 app.use('/counter', counterRoutes);

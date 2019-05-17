@@ -9,6 +9,4 @@ Object.keys(scope.application.precompiled).forEach(key => {
   handlebars.registerPartial(key, Handlebars.template(partial));
 });
 
-console.log(handlebars.partials);
-
 new LiveRender('http://localhost:3000', { handlebars }).connect();

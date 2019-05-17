@@ -8,7 +8,7 @@ const livereload = require('livereload');
 const formatHost = {
   getCanonicalFileName: path => path,
   getCurrentDirectory: ts.sys.getCurrentDirectory,
-  getNewLine: () => ts.sys.newLine
+  getNewLine: () => ts.sys.newLine,
 };
 
 /**
@@ -47,9 +47,9 @@ async function main() {
   const livereloadServer = livereload.createServer({ exts: ['hbs'] });
   livereloadServer.watch([path.resolve(rootDir, 'views/')]);
 
-  const bundler = new Bundler('assets/ts/main.ts', {
+  const bundler = new Bundler('assets/src/main.ts', {
     outDir: path.resolve(rootDir, 'public/build/'),
-    publicUrl: './'
+    publicUrl: './',
   });
   await bundler.bundle();
 
