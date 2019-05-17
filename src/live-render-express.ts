@@ -1,7 +1,17 @@
-import { Request, Response } from 'express';
-import { NextFunction } from 'connect';
+import { Response, Request, Handler, RequestHandler } from 'express';
 import { SafeString } from 'handlebars';
 import uniqid from 'uniqid';
+import crypto from 'crypto';
+import http from 'http';
+import sessionMiddleware from './session-middleware';
+import { ClientReadyPayload, RegionInit } from '../common/types';
+
+function hashSource(source: string): string {
+  return crypto
+    .createHash('sha1')
+    .update(source)
+    .digest('base64');
+}
 
 export type ExpressRenderCallback = (err: Error | null | undefined, html: string) => void;
 
@@ -12,13 +22,79 @@ declare global {
       liveRender(view: string, callback?: ExpressRenderCallback): void;
     }
   }
+
+  namespace SocketIO {
+    interface Handshake {
+      session: Request['session'];
+    }
+  }
 }
 
-export function liveRenderExpress() {
-  return (_req: Request, res: Response, next: NextFunction) => {
-    res.liveRender = liveRender;
-    next();
-  };
+export interface LiveRenderExpressInstance {
+  listen(server: SocketIO.Server | SocketIO.Namespace): SocketIO.Namespace;
+  getMiddleware(): Handler;
+}
+
+class DefaultInstance implements LiveRenderExpressInstance {
+  private sessionMiddleware: RequestHandler;
+
+  constructor(options: LiveRenderExpressOptions) {
+    this.sessionMiddleware = options.session;
+  }
+
+  listen(server: SocketIO.Server | SocketIO.Namespace): SocketIO.Namespace {
+    server.use((socket, next) => {
+      // TODO: Probably don't want/need to rely on express-session directly
+      // Danger zone!
+      const req = socket.handshake as any;
+      sessionMiddleware(req, new http.ServerResponse(req) as any, next);
+    });
+    return server.on('connection', this.handleConnection.bind(this));
+  }
+
+  getMiddleware(): Handler {
+    return (_req, res, next) => {
+      res.liveRender = liveRender;
+      next();
+    };
+  }
+
+  private async handleConnection(socket: SocketIO.Socket) {
+    const session = socket.handshake.session;
+    if (session == null) {
+      throw new Error('Session uninitialized in socket, likely liveRender internal error');
+    }
+    session.touch(err => {
+      if (err) throw err; // I guess?
+    });
+    let regionIds: string[] = [];
+    socket.on('live:ready', (payload: ClientReadyPayload) => {
+      regionIds = payload.regionIds;
+      session.reload(err => {
+        if (err) throw err;
+        const regions: Record<string, RegionInit | undefined> = {};
+        for (const id of regionIds) {
+          const region: any = session.liveRender.regions[id];
+          if (region) {
+            regions[id] = {
+              source: region.source,
+              hash: region.hash,
+              templateData: region.templateData,
+            };
+          }
+        }
+        socket.emit('live:init', { regions });
+      });
+    });
+  }
+}
+
+export interface LiveRenderExpressOptions {
+  session: RequestHandler;
+}
+
+export function create(options: LiveRenderExpressOptions): LiveRenderExpressInstance {
+  return new DefaultInstance(options);
 }
 
 function liveRender(this: Response, view: string, arg2?: unknown, arg3?: unknown): void {
@@ -40,16 +116,31 @@ function liveRender(this: Response, view: string, arg2?: unknown, arg3?: unknown
   this.render(view, options, callback);
 }
 
-function registerLiveTemplate(res: Response, context: unknown): string {
-  return uniqid();
+function registerLiveTemplate(req: Request, source: string, templateData: unknown): string {
+  const regionId = uniqid();
+  const hash = hashSource(source);
+  const session = req.session;
+  if (session == null) {
+    throw new Error('liveRender() requires an active session');
+  }
+  session.liveRender = session.liveRender || {};
+  session.liveRender.regions = session.liveRender.regions || {};
+  session.liveRender.regions[regionId] = {
+    id: regionId,
+    source,
+    hash,
+    templateData,
+    acked: {},
+  };
+  return regionId;
 }
 
-function makeBeginComment(id: string) {
-  return '<!--live-begin: ' + id + '-->';
+function makeBeginComment(regionId: string) {
+  return '<!--live-begin: ' + regionId + '-->';
 }
 
-function makeEndComment(id: string) {
-  return '<!--live-end: ' + id + '-->';
+function makeEndComment(regionId: string) {
+  return '<!--live-end: ' + regionId + '-->';
 }
 
 function liveHelper(this: Response, arg1: unknown, arg2?: unknown, arg3?: unknown) {
@@ -79,8 +170,10 @@ function liveHelper(this: Response, arg1: unknown, arg2?: unknown, arg3?: unknow
   for (const [key, value] of Object.entries(options.hash)) {
     context[key] = value;
   }
-  const id = registerLiveTemplate(this, context);
-  return new SafeString(makeBeginComment(id) + partial(context) + makeEndComment(id));
+  const source: string = partial(context);
+  // this.req should be initialized at this point since middleware has run
+  const regionId = registerLiveTemplate(this.req!, source, context);
+  return new SafeString(makeBeginComment(regionId) + source + makeEndComment(regionId));
 }
 
-export default liveRenderExpress;
+export default create;

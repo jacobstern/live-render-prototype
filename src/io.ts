@@ -1,10 +1,10 @@
 import http from 'http';
 import SocketIO from 'socket.io';
-import useCounter from './counter/live';
+import liveRender from './live-render';
 
 export function useSocketIO(server: http.Server) {
   const io = SocketIO(server);
-  useCounter(io);
+  liveRender.listen(io.of('/live'));
 }
 
 export default useSocketIO;

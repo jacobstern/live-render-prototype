@@ -1,5 +1,6 @@
 import io from 'socket.io-client';
 import morphdom from 'morphdom';
+import { ClientReadyPayload, InitPayload, RegionInit } from '../../../common/types';
 
 function onDocumentReady(callback: VoidFunction) {
   if (document.readyState === 'interactive' || document.readyState === 'complete') {
@@ -31,10 +32,11 @@ function enumerateLiveRegions(root: Node): LiveRegion[] {
       // Not expected
       continue;
     }
-    const match = commentText.match(REGION_BEGIN_COMMENT_REGEX);
-    if (match != null) {
-      const id = match[1];
+    const beginMatch = commentText.match(REGION_BEGIN_COMMENT_REGEX);
+    if (beginMatch != null) {
+      const id = beginMatch[1];
       const nodes = [];
+      let malformed = false;
       for (let sibling = comment.nextSibling; sibling != null; sibling = sibling.nextSibling) {
         if (sibling.nodeType === Node.COMMENT_NODE) {
           const siblingCommentText = sibling.nodeValue;
@@ -49,6 +51,7 @@ function enumerateLiveRegions(root: Node): LiveRegion[] {
               console.warn(
                 `Possible malformed live-render output, expected ${id} but found ${siblingId}`
               );
+              malformed = true;
             }
             break; // We've enumerated all relevant nodes
           } else {
@@ -59,18 +62,22 @@ function enumerateLiveRegions(root: Node): LiveRegion[] {
           nodes.push(sibling);
         }
       }
-      liveRegions.push({ id, nodes });
+      if (!malformed) {
+        liveRegions.push({ id, nodes });
+      }
     }
   }
   return liveRegions;
 }
 
 export class LiveSocket {
-  private liveRegions: LiveRegion[] = [];
+  private liveRegions: Record<string, LiveRegion | undefined> = {};
   private socket: SocketIOClient.Socket;
 
   constructor(url: string) {
-    this.socket = io(url, { autoConnect: false });
+    const socket = io(url, { autoConnect: false });
+    this.socket = socket;
+    socket.on('live:init', this.handleInit);
   }
 
   connect(): SocketIOClient.Socket {
@@ -79,7 +86,56 @@ export class LiveSocket {
   }
 
   private initWithDOM() {
-    this.liveRegions = enumerateLiveRegions(document.body);
+    this.liveRegions = {};
+    enumerateLiveRegions(document.body).forEach(region => {
+      this.liveRegions[region.id] = region;
+    });
+    if (this.socket.connected) {
+      this.emitReady();
+    } else {
+      this.socket.on('connect', this.emitReady.bind(this));
+    }
+  }
+
+  private emitReady() {
+    const payload: ClientReadyPayload = {
+      regionIds: Object.keys(this.liveRegions),
+    };
+    this.socket.emit('live:ready', payload);
+  }
+
+  private handleInit = (payload: InitPayload) => {
+    Object.keys(payload.regions).forEach(id => {
+      const regionInit = payload.regions[id] as RegionInit;
+      const region = this.liveRegions[id];
+      if (region) {
+        this.morphRegion(region, regionInit.source);
+      }
+    });
+  };
+
+  private morphRegion(region: LiveRegion, source: string) {
+    if (region.nodes.length === 0) {
+      return;
+    }
+    const lastNode = region.nodes[region.nodes.length - 1];
+    const afterSibling = lastNode.nextSibling;
+    const div = document.createElement('div');
+    const parent = lastNode.parentNode;
+    if (parent) {
+      region.nodes.forEach(node => {
+        div.appendChild(node);
+      });
+      morphdom(div, '<div>' + source + '</div>', { childrenOnly: true });
+      // We may have added or removed nodes from the template, so recompute region.nodes
+      region.nodes = [];
+      div.childNodes.forEach(node => {
+        region.nodes.push(node);
+      });
+      region.nodes.forEach(node => {
+        parent.insertBefore(node, afterSibling);
+      });
+    }
   }
 }
 

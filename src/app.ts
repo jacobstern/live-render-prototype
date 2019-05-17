@@ -7,7 +7,8 @@ import helmet from 'helmet';
 import logger from 'morgan';
 import favicon from 'serve-favicon';
 import { getStatusText } from 'http-status-codes';
-import liveRenderExpress from './live-render-express';
+import liveRender from './live-render';
+import sessionMiddleware from './session-middleware';
 import { StatusError } from './errors';
 import counterRoutes from './counter/router';
 import precompiledPartials from './middleware/precompiled-partials';
@@ -34,12 +35,14 @@ app.use(express.urlencoded({ extended: true }));
 app.use(logger('dev'));
 app.use(express.static(path.resolve(__dirname, '../public')));
 
+app.use(sessionMiddleware);
+
 app.engine('.hbs', exphbs.engine);
 app.set('view engine', '.hbs');
 
 app.use(precompiledPartials(exphbs));
 
-app.use(liveRenderExpress());
+app.use(liveRender.getMiddleware());
 
 app.use('/', counterRoutes);
 app.use('/counter', counterRoutes);
