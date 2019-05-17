@@ -1,6 +1,5 @@
 import io from 'socket.io-client';
 import morphdom from 'morphdom';
-import Handlebars from 'handlebars/runtime';
 
 function onDocumentReady(callback: VoidFunction) {
   if (document.readyState === 'interactive' || document.readyState === 'complete') {
@@ -10,128 +9,78 @@ function onDocumentReady(callback: VoidFunction) {
   }
 }
 
-interface LiveRenderSocketOptions {
-  url: string;
-  container: HTMLElement;
-  renderCallback: (data: unknown) => string;
-  initialData: unknown;
+interface LiveRegion {
+  nodes: Node[];
+  id: string;
 }
 
-class LiveRenderSocket {
+const REGION_BEGIN_COMMENT_REGEX = /live-begin: (\S+)/;
+const REGION_END_COMMENT_REGEX = /live-end: (\S+)/;
+
+function enumerateLiveRegions(root: Node): LiveRegion[] {
+  const liveRegions: LiveRegion[] = [];
+  const commentIterator = document.createNodeIterator(root, NodeFilter.SHOW_COMMENT);
+  for (
+    let node = commentIterator.nextNode();
+    node != null;
+    node = commentIterator.nextNode()
+  ) {
+    const comment = node as Comment;
+    const commentText = comment.nodeValue;
+    if (commentText == null) {
+      // Not expected
+      continue;
+    }
+    const match = commentText.match(REGION_BEGIN_COMMENT_REGEX);
+    if (match != null) {
+      const id = match[1];
+      const nodes = [];
+      for (let sibling = comment.nextSibling; sibling != null; sibling = sibling.nextSibling) {
+        if (sibling.nodeType === Node.COMMENT_NODE) {
+          const siblingCommentText = sibling.nodeValue;
+          if (siblingCommentText == null) {
+            // Not expected
+            continue;
+          }
+          const endMatch = siblingCommentText.match(REGION_END_COMMENT_REGEX);
+          if (endMatch != null) {
+            const siblingId = endMatch[1];
+            if (id !== siblingId) {
+              console.warn(
+                `Possible malformed live-render output, expected ${id} but found ${siblingId}`
+              );
+            }
+            break; // We've enumerated all relevant nodes
+          } else {
+            // Not a region end comment
+            nodes.push(sibling);
+          }
+        } else {
+          nodes.push(sibling);
+        }
+      }
+      liveRegions.push({ id, nodes });
+    }
+  }
+  return liveRegions;
+}
+
+export class LiveSocket {
+  private liveRegions: LiveRegion[] = [];
   private socket: SocketIOClient.Socket;
-  private data: unknown;
 
-  public connect() {
-    if (!this.socket.connected) {
-      this.socket.connect();
-    }
+  constructor(url: string) {
+    this.socket = io(url, { autoConnect: false });
   }
 
-  constructor(private options: LiveRenderSocketOptions) {
-    this.socket = io(options.url);
-    this.data = options.initialData;
-    this.initSocket();
-    this.registerInitialHandlers();
+  connect(): SocketIOClient.Socket {
+    onDocumentReady(this.initWithDOM.bind(this));
+    return this.socket.connect();
   }
 
-  private initSocket(): void {
-    this.socket.on('live:update', (data: unknown) => {
-      const { renderCallback, container } = this.options;
-      const rendered = renderCallback(data);
-      this.data = data;
-      morphdom(container, `<div>${rendered}</div>`, {
-        childrenOnly: true,
-        onNodeAdded: node => {
-          if (node instanceof HTMLElement && node.dataset.liveClick) {
-            node.addEventListener('click', this.handleClick);
-          }
-          return node;
-        },
-        onNodeDiscarded: node => {
-          if (node instanceof HTMLElement) {
-            node.removeEventListener('click', this.handleClick);
-          }
-        },
-      });
-    });
-  }
-
-  private registerInitialHandlers(): void {
-    this.options.container.querySelectorAll(selectors.click).forEach(elem => {
-      if (elem instanceof HTMLElement) {
-        elem.addEventListener('click', this.handleClick);
-      }
-    });
-  }
-
-  private handleClick = (event: MouseEvent) => {
-    const target = event.currentTarget as HTMLElement;
-    const eventName = target.dataset.liveClick;
-    if (eventName) {
-      this.socket.emit(eventName, { data: this.data });
-    }
-  };
-}
-
-const selectors = {
-  entry: '[data-live-entry]',
-  click: '[data-live-click]',
-};
-
-export interface LiveRenderOptions {
-  handlebars: typeof Handlebars;
-}
-
-export class LiveRender {
-  private sockets: Array<LiveRenderSocket> = [];
-
-  constructor(private baseUrl: string, private options: LiveRenderOptions) {}
-
-  connect(): void {
-    onDocumentReady(this.initWithDom.bind(this));
-  }
-
-  private initWithDom() {
-    document.querySelectorAll(selectors.entry).forEach(elem => {
-      if (elem instanceof HTMLElement) {
-        if (elem.querySelector(selectors.entry) != null) {
-          throw new Error('Nested liveRender entry points detected, this is not supported.');
-        }
-        const partialName = elem.dataset.liveEntry;
-        if (partialName) {
-          const url = this.buildUrl(partialName);
-          const contextJson = elem.dataset.liveContext;
-          if (contextJson) {
-            const renderCallback = (data: unknown) => {
-              const partial = this.options.handlebars.partials[partialName];
-              if (partial == null) {
-                throw new Error('No partial registered with name ' + partialName);
-              }
-              return partial(data);
-            };
-            const initialData = JSON.parse(contextJson);
-            const socket = new LiveRenderSocket({
-              url,
-              renderCallback,
-              initialData,
-              container: elem,
-            });
-            this.sockets.push(socket);
-            socket.connect();
-          }
-        }
-      }
-    });
-  }
-
-  private buildUrl(partialName: string): string {
-    let url = this.baseUrl;
-    if (!url.endsWith('/')) {
-      url += '/';
-    }
-    url += partialName;
-    return url;
+  private initWithDOM() {
+    this.liveRegions = enumerateLiveRegions(document.body);
   }
 }
 
-export default LiveRender;
+export default LiveSocket;
