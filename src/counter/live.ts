@@ -12,4 +12,12 @@ gateway.on('increment', (client, message) => {
   client.update(templateData);
 });
 
+gateway.on('decrement', (client, message) => {
+  const templateData = message.templateData as CounterState;
+  if (templateData.count > 0) {
+    templateData.count--;
+  }
+  client.update(templateData);
+});
+
 export default gateway;

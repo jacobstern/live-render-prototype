@@ -6,6 +6,7 @@ import {
   RegionInit,
   ClientUpdateAckPayload,
   ClickEventPayload,
+  FullUpdatePayload,
 } from '../../../common/types';
 
 function onDocumentReady(callback: VoidFunction) {
@@ -86,6 +87,7 @@ export class LiveSocket {
     const socket = io(url, { autoConnect: false });
     this.socket = socket;
     socket.on('live:init', this.handleInit);
+    socket.on('live:fullUpdate', this.handleFullUpdate);
   }
 
   connect(): SocketIOClient.Socket {
@@ -133,6 +135,7 @@ export class LiveSocket {
   };
 
   private handleClick = (event: MouseEvent) => {
+    event.preventDefault();
     const target = event.currentTarget as HTMLElement;
     const eventName = target.dataset.liveClick;
     if (eventName) {
@@ -140,6 +143,16 @@ export class LiveSocket {
       if (region) {
         this.emitClickEvent(region.id, eventName);
       }
+    }
+  };
+
+  private handleFullUpdate = (payload: FullUpdatePayload) => {
+    const region = this.liveRegions[payload.regionId];
+    if (region) {
+      this.morphRegion(region, payload.source);
+      region.source = payload.source;
+      region.hash = payload.hash;
+      this.emitUpdateAck([region]);
     }
   };
 

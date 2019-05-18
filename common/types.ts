@@ -24,3 +24,10 @@ export interface ClickEventPayload {
   regionId: string;
   eventName: string;
 }
+
+export interface FullUpdatePayload {
+  regionId: string;
+  source: string;
+  hash: string;
+  templateData: unknown;
+}

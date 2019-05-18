@@ -1,7 +1,6 @@
 import compression from 'compression';
 import path from 'path';
 import express, { NextFunction, Request, Response } from 'express';
-import ExpressHandlebars from 'express-handlebars';
 import Handlebars from 'handlebars';
 import helmet from 'helmet';
 import logger from 'morgan';
@@ -10,17 +9,9 @@ import { getStatusText } from 'http-status-codes';
 import liveRender from './live-render';
 import sessionMiddleware from './session-middleware';
 import { StatusError } from './errors';
+import expressHandlebars from './express-handlebars';
 import counterRoutes from './counter/router';
 import precompiledPartials from './middleware/precompiled-partials';
-
-const handlebars = Handlebars.create();
-
-const exphbs = ExpressHandlebars.create({
-  defaultLayout: 'main.hbs',
-  handlebars,
-  extname: '.hbs',
-  partialsDir: path.resolve(__dirname, '../views/partials'),
-});
 
 const app = express();
 
@@ -37,10 +28,8 @@ app.use(express.static(path.resolve(__dirname, '../public')));
 
 app.use(sessionMiddleware);
 
-app.engine('.hbs', exphbs.engine);
+app.engine('.hbs', expressHandlebars.engine);
 app.set('view engine', '.hbs');
-
-app.use(precompiledPartials(exphbs));
 
 app.use(liveRender.getMiddleware());
 

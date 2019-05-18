@@ -9,6 +9,7 @@ import {
   InitPayload,
   ClientUpdateAckPayload,
   ClickEventPayload,
+  FullUpdatePayload,
 } from '../common/types';
 import { EventEmitter } from 'events';
 
@@ -73,13 +74,16 @@ export interface LiveRenderExpressInstance {
 class DefaultInstance implements LiveRenderExpressInstance {
   private session: RequestHandler;
   private gateways: Record<string, LiveGateway | undefined> = {};
+  private expressHandlebars: Exphbs;
 
   constructor(options: LiveRenderExpressOptions) {
     this.session = options.session;
+    this.expressHandlebars = options.expressHandlebars;
   }
 
   listen(server: SocketIO.Server | SocketIO.Namespace): SocketIO.Namespace {
     server.use((socket, next) => {
+      // TODO: Custom sessions using memorystore?
       // Danger zone!
       const req = socket.handshake as any;
       this.session(req, new http.ServerResponse(req) as any, next);
@@ -121,7 +125,7 @@ class DefaultInstance implements LiveRenderExpressInstance {
                 type: 'click',
                 templateData: region.templateData,
               };
-              gateway.emit(eventName, new DefaultClient(() => undefined), message);
+              gateway.emit(eventName, this.makeClient(socket, regionId, session), message);
             }
           }
         });
@@ -175,10 +179,47 @@ class DefaultInstance implements LiveRenderExpressInstance {
     const normalizedPath = this.normalizeGatewayPath(templatePath);
     return this.gateways[normalizedPath];
   }
+
+  private makeClient(
+    socket: SocketIO.Socket,
+    regionId: string,
+    session: Express.Session
+  ): DefaultClient {
+    return new DefaultClient(templateData => {
+      session.reload(async err => {
+        if (err) throw err;
+        const region: any = session.liveRender.regions[regionId];
+        if (region) {
+          const source = await this.renderTemplate(region.templatePath, templateData);
+          const hash = hashSource(source);
+          region.source = source;
+          region.hash = hash;
+          region.templateData = templateData;
+          session.save(err => {
+            if (err) throw err;
+            const payload: FullUpdatePayload = {
+              regionId,
+              source,
+              hash,
+              templateData,
+            };
+            socket.emit('live:fullUpdate', payload);
+          });
+        }
+      });
+    });
+  }
+
+  private async renderTemplate(templatePath: string, templateData: unknown): Promise<string> {
+    const partials = (await this.expressHandlebars.getPartials({ cache: true })) as any;
+    const partial: any = partials[templatePath];
+    return partial(templateData);
+  }
 }
 
 export interface LiveRenderExpressOptions {
   session: RequestHandler;
+  expressHandlebars: Exphbs;
 }
 
 export function create(options: LiveRenderExpressOptions): LiveRenderExpressInstance {
