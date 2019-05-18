@@ -138,7 +138,7 @@ export class LiveSocket {
   private handleClick = (event: MouseEvent) => {
     event.preventDefault();
     const target = event.currentTarget as HTMLElement;
-    const eventName = target.dataset.liveClick;
+    const eventName = target.getAttribute('data-live-click');
     if (eventName) {
       const region = this.getRootRegion(target);
       if (region) {
@@ -190,13 +190,14 @@ export class LiveSocket {
     const div = document.createElement('div');
     const parent = lastNode.parentNode;
     if (parent) {
+      const activeElement = document.activeElement;
       region.nodes.forEach(node => {
         div.appendChild(node);
       });
       morphdom(div, '<div>' + source + '</div>', {
         childrenOnly: true,
         onNodeAdded: node => {
-          if (node instanceof HTMLElement && node.dataset.liveClick) {
+          if (node instanceof HTMLElement && node.getAttribute('data-live-click')) {
             node.addEventListener('click', this.handleClick);
           }
           return node;
@@ -206,11 +207,19 @@ export class LiveSocket {
             node.removeEventListener('click', this.handleClick);
           }
         },
-        onBeforeElUpdated: function(fromEl, toEl) {
+        onBeforeElUpdated: (fromEl, toEl) => {
           if (fromEl.isEqualNode && fromEl.isEqualNode(toEl)) {
             return false;
           }
           return true;
+        },
+        getNodeKey: node => {
+          if (node instanceof HTMLElement) {
+            const key = node.getAttribute('data-live-key') || node.id;
+            if (key) {
+              return key;
+            }
+          }
         },
       });
       // We may have added or removed nodes from the template, so recompute region.nodes
@@ -221,6 +230,12 @@ export class LiveSocket {
       region.nodes.forEach(node => {
         parent.insertBefore(node, afterSibling);
       });
+      if (activeElement && activeElement !== document.body) {
+        const active = activeElement as Record<string, unknown>;
+        if (typeof active.focus === 'function') {
+          active.focus();
+        }
+      }
     }
   }
 

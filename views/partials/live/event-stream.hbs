@@ -10,12 +10,11 @@
 
     <div class="buttons">
       {{#if streaming}}
-        {{!-- TODO: Implement data-live-key --}}
-        <button class="button" data-live-click="stopStreaming">
+        <button id="toggle-streaming-button" class="button" data-live-click="stopStreaming">
           Stop Streaming
         </button>
       {{else}}
-        <button class="button is-primary" data-live-click="startStreaming">
+        <button id="toggle-streaming-button" class="button is-primary" data-live-click="startStreaming">
           Start Streaming
         </button>
       {{/if}}
@@ -24,7 +23,7 @@
     <div class="content">
       <ul>
         {{#each messages}}
-          <li>
+          <li data-live-key="{{id}}">
             Change by <b>{{user}}</b>&nbsp;{{{parsedcomment}}}
           </li>
         {{/each}}

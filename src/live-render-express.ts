@@ -8,7 +8,6 @@ import {
   ClientReadyPayload,
   RegionInit,
   InitPayload,
-  ClientUpdateAckPayload,
   ClickEventPayload,
   FullUpdatePayload,
   DiffUpdatePayload,
@@ -42,6 +41,7 @@ declare global {
 
 export interface Client {
   readonly socket: SocketIO.Socket;
+  once(userEvent: string, callback: (message: UserEventMessage) => void): this;
   on(userEvent: string, callback: (message: UserEventMessage) => void): this;
   update(templateData: unknown): void;
 }
@@ -57,6 +57,16 @@ class DefaultClient extends EventEmitter implements Client {
 
   update(templateData: unknown): void {
     this.updateDelegate(templateData);
+  }
+
+  once(userEvent: string, callback: (message: UserEventMessage) => void): this {
+    this.gateway.once(userEvent, (client, message) => {
+      if (client.socket.id === this.socket.id) {
+        this.emit(userEvent, message);
+      }
+    });
+    super.once(userEvent, callback);
+    return this;
   }
 
   on(userEvent: string, callback: (message: UserEventMessage) => void): this {
@@ -80,6 +90,13 @@ export type UserEventMessage = ClickMessage;
 const RESERVED_GATEWAY_EVENTS = ['ready'];
 
 export class LiveGateway extends EventEmitter {
+  once(event: 'ready', callback: (client: Client) => void): this;
+  once(userEvent: string, callback: (client: Client, message: UserEventMessage) => void): this;
+
+  once(event: string, callback: (...args: any[]) => void): this {
+    return super.once(event, callback);
+  }
+
   on(event: 'ready', callback: (client: Client) => void): this;
   on(userEvent: string, callback: (client: Client, message: UserEventMessage) => void): this;
 

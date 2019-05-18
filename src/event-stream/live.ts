@@ -9,6 +9,7 @@ interface EventStreamState {
 }
 
 interface Message {
+  id: string;
   bot: boolean;
   user: string;
   parsedcomment: string;
@@ -29,7 +30,7 @@ gateway.on('startStreaming', client => {
       client.update({ streaming: true, messages });
     }
   };
-  client.on('stopStreaming', message => {
+  client.once('stopStreaming', message => {
     const templateData = message.templateData as EventStreamState;
     templateData.streaming = false;
     eventSource.close();
