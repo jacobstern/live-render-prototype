@@ -10,7 +10,8 @@
 
     <div class="buttons">
       {{#if streaming}}
-        <button class="button" data-live-click="startStreaming">
+        {{!-- TODO: Implement data-live-key --}}
+        <button class="button" data-live-click="stopStreaming">
           Stop Streaming
         </button>
       {{else}}
@@ -21,7 +22,7 @@
     </div>
 
     <div class="content">
-      
+
     </div>
   </div>
 </section>

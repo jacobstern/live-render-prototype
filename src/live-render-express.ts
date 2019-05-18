@@ -41,14 +41,31 @@ declare global {
 }
 
 export interface Client {
-  update(templateData: unknown): this;
+  readonly socket: SocketIO.Socket;
+  on(userEvent: string, callback: (message: UserEventMessage) => void): this;
+  update(templateData: unknown): void;
 }
 
-class DefaultClient implements Client {
-  constructor(private updateDelegate: (templateData: unknown) => void) {}
+class DefaultClient extends EventEmitter implements Client {
+  constructor(
+    public readonly socket: SocketIO.Socket,
+    private gateway: LiveGateway,
+    private updateDelegate: (templateData: unknown) => void
+  ) {
+    super();
+  }
 
-  update(templateData: unknown): this {
+  update(templateData: unknown): void {
     this.updateDelegate(templateData);
+  }
+
+  on(userEvent: string, callback: (message: UserEventMessage) => void): this {
+    this.gateway.on(userEvent, (client, message) => {
+      if (client.socket.id === this.socket.id) {
+        this.emit(userEvent, message);
+      }
+    });
+    super.on(userEvent, callback);
     return this;
   }
 }
@@ -60,7 +77,10 @@ export interface ClickMessage {
 
 export type UserEventMessage = ClickMessage;
 
+const RESERVED_GATEWAY_EVENTS = ['ready'];
+
 export class LiveGateway extends EventEmitter {
+  on(event: 'ready', callback: (client: Client) => void): this;
   on(userEvent: string, callback: (client: Client, message: UserEventMessage) => void): this;
 
   on(event: string, callback: (...args: any[]) => void): this {
@@ -136,12 +156,16 @@ class DefaultInstance implements LiveRenderExpressInstance {
           const region: any = session.liveRender.regions[regionId];
           if (region) {
             const gateway = this.getGateway(region.templatePath);
-            if (gateway && gateway.eventNames().includes(eventName)) {
+            if (gateway && !RESERVED_GATEWAY_EVENTS.includes(eventName)) {
               const message: ClickMessage = {
                 type: 'click',
                 templateData: region.templateData,
               };
-              gateway.emit(eventName, this.makeClient(socket, regionId, session), message);
+              gateway.emit(
+                eventName,
+                this.makeClient(gateway, socket, regionId, session),
+                message
+              );
             }
           }
         });
@@ -154,6 +178,10 @@ class DefaultInstance implements LiveRenderExpressInstance {
           for (const id of regionIds) {
             const region: any = session.liveRender.regions[id];
             if (region) {
+              const gateway = this.getGateway(region.templatePath);
+              if (gateway) {
+                gateway.emit('ready', this.makeClient(gateway, socket, id, session));
+              }
               regions[id] = {
                 source: region.source,
                 hash: region.hash,
@@ -197,11 +225,12 @@ class DefaultInstance implements LiveRenderExpressInstance {
   }
 
   private makeClient(
+    gateway: LiveGateway,
     socket: SocketIO.Socket,
     regionId: string,
     session: Express.Session
   ): DefaultClient {
-    return new DefaultClient(templateData => {
+    const client = new DefaultClient(socket, gateway, templateData => {
       session.reload(async err => {
         if (err) throw err;
         const region: any = session.liveRender.regions[regionId];
@@ -241,6 +270,7 @@ class DefaultInstance implements LiveRenderExpressInstance {
         }
       });
     });
+    return client;
   }
 
   private async renderTemplate(templatePath: string, templateData: unknown): Promise<string> {
