@@ -5,6 +5,7 @@ import {
   InitPayload,
   RegionInit,
   ClientUpdateAckPayload,
+  ClickEventPayload,
 } from '../../../common/types';
 
 function onDocumentReady(callback: VoidFunction) {
@@ -102,6 +103,11 @@ export class LiveSocket {
     } else {
       this.socket.on('connect', this.emitReady.bind(this));
     }
+    document.querySelectorAll('[data-live-click]').forEach(element => {
+      if (element instanceof HTMLElement) {
+        element.addEventListener('click', this.handleClick);
+      }
+    });
   }
 
   private emitReady() {
@@ -126,6 +132,17 @@ export class LiveSocket {
     this.emitUpdateAck(updatedRegions);
   };
 
+  private handleClick = (event: MouseEvent) => {
+    const target = event.currentTarget as HTMLElement;
+    const eventName = target.dataset.liveClick;
+    if (eventName) {
+      const region = this.getRootRegion(target);
+      if (region) {
+        this.emitClickEvent(region.id, eventName);
+      }
+    }
+  };
+
   private emitUpdateAck(updatedRegions: LiveRegion[]): void {
     const payload: ClientUpdateAckPayload = {
       regions: {},
@@ -136,6 +153,11 @@ export class LiveSocket {
       }
     });
     this.socket.emit('live:updateAck', payload);
+  }
+
+  private emitClickEvent(regionId: string, eventName: string): void {
+    const payload: ClickEventPayload = { regionId, eventName };
+    this.socket.emit('live:clickEvent', payload);
   }
 
   private morphRegion(region: LiveRegion, source: string) {
@@ -150,7 +172,20 @@ export class LiveSocket {
       region.nodes.forEach(node => {
         div.appendChild(node);
       });
-      morphdom(div, '<div>' + source + '</div>', { childrenOnly: true });
+      morphdom(div, '<div>' + source + '</div>', {
+        childrenOnly: true,
+        onNodeAdded: node => {
+          if (node instanceof HTMLElement && node.dataset.liveClick) {
+            node.addEventListener('click', this.handleClick);
+          }
+          return node;
+        },
+        onNodeDiscarded: node => {
+          if (node instanceof HTMLElement) {
+            node.removeEventListener('click', this.handleClick);
+          }
+        },
+      });
       // We may have added or removed nodes from the template, so recompute region.nodes
       region.nodes = [];
       div.childNodes.forEach(node => {
@@ -160,6 +195,17 @@ export class LiveSocket {
         parent.insertBefore(node, afterSibling);
       });
     }
+  }
+
+  private getRootRegion(element: Element): LiveRegion | undefined {
+    return Object.values(this.liveRegions).find(region => {
+      if (region == null) {
+        return false;
+      }
+      return region.nodes.some(node => {
+        return node.contains(element);
+      });
+    });
   }
 }
 

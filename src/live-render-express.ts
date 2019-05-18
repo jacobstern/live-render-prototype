@@ -121,7 +121,7 @@ class DefaultInstance implements LiveRenderExpressInstance {
                 type: 'click',
                 templateData: region.templateData,
               };
-              gateway.emit(eventName, message);
+              gateway.emit(eventName, new DefaultClient(() => undefined), message);
             }
           }
         });
