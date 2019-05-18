@@ -1,7 +1,7 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "lib": ["es6", "dom"],
+    "lib": ["es2017", "dom"],
     "target": "es5",
     "types": ["socket.io-client", "handlebars", "morphdom"]
   }

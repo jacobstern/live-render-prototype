@@ -39,10 +39,12 @@ declare global {
   }
 }
 
-export interface Client {
+export interface Client extends EventEmitter {
   readonly socket: SocketIO.Socket;
+
   once(userEvent: string, callback: (message: UserEventMessage) => void): this;
   on(userEvent: string, callback: (message: UserEventMessage) => void): this;
+
   update(templateData: unknown): void;
 }
 

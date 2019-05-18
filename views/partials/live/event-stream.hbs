@@ -10,11 +10,15 @@
 
     <div class="buttons">
       {{#if streaming}}
-        <button id="toggle-streaming-button" class="button" data-live-click="stopStreaming">
+        <button
+          id="toggle-streaming-button" class="button" data-live-click="stopStreaming"
+          data-live-pending-class="is-loading">
           Stop Streaming
         </button>
       {{else}}
-        <button id="toggle-streaming-button" class="button is-primary" data-live-click="startStreaming">
+        <button 
+          id="toggle-streaming-button" class="button is-primary" data-live-click="startStreaming"
+          data-live-pending-class="is-loading">
           Start Streaming
         </button>
       {{/if}}

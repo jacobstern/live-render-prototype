@@ -82,6 +82,7 @@ function enumerateLiveRegions(root: Node): LiveRegion[] {
 
 export class LiveSocket {
   private liveRegions: Record<string, LiveRegion | undefined> = {};
+  private pendingElements: HTMLElement[] = [];
   private socket: SocketIOClient.Socket;
 
   constructor(url: string) {
@@ -143,6 +144,8 @@ export class LiveSocket {
       const region = this.getRootRegion(target);
       if (region) {
         this.emitClickEvent(region.id, eventName);
+        this.applyPendingClass(target);
+        this.pendingElements.push(target);
       }
     }
   };
@@ -157,6 +160,7 @@ export class LiveSocket {
   };
 
   private handleDiffUpdate = (payload: DiffUpdatePayload) => {
+    this.resetPendingElements(); // TODO: Make the semantics of "meaningful response from server" clearer
     const region = this.liveRegions[payload.regionId];
     if (region) {
       const source = region.source;
@@ -172,7 +176,6 @@ export class LiveSocket {
   };
 
   private emitDesync(region: LiveRegion) {
-    console.warn('desync!');
     this.socket.emit('live:desync', { regionId: region.id });
   }
 
@@ -236,20 +239,51 @@ export class LiveSocket {
           active.focus();
         }
       }
+      // Restore pending class if necessary
+      this.pendingElements.forEach(element => {
+        this.applyPendingClass(element);
+      });
     }
   }
 
   private getRootRegion(element: Element): LiveRegion | undefined {
-    return Object.keys(this.liveRegions)
-      .map(key => this.liveRegions[key])
-      .find(region => {
-        if (region == null) {
-          return false;
-        }
-        return region.nodes.some(node => {
-          return node.contains(element);
-        });
+    return Object.values(this.liveRegions).find(region => {
+      if (region == null) {
+        return false;
+      }
+      return region.nodes.some(node => {
+        return node.contains(element);
       });
+    });
+  }
+
+  private applyPendingClass(element: HTMLElement): void {
+    const className = this.getPendingClassName(element);
+    if (element.classList) {
+      element.classList.add(className);
+    }
+  }
+
+  private removePendingClass(element: HTMLElement): void {
+    const className = this.getPendingClassName(element);
+    if (element.classList) {
+      element.classList.remove(className);
+    }
+  }
+
+  private getPendingClassName(element: HTMLElement): string {
+    let className = element.getAttribute('data-live-pending-class');
+    if (!className) {
+      className = 'live-pending';
+    }
+    return className;
+  }
+
+  private resetPendingElements(): void {
+    this.pendingElements.forEach(element => {
+      this.removePendingClass(element);
+    });
+    this.pendingElements = [];
   }
 }
 
