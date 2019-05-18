@@ -1,3 +1,5 @@
+import { CompactDiff } from './diff';
+
 export interface ClientReadyPayload {
   regionIds: string[];
 }
@@ -28,6 +30,14 @@ export interface ClickEventPayload {
 export interface FullUpdatePayload {
   regionId: string;
   source: string;
+  hash: string;
+  templateData: unknown;
+}
+
+export interface DiffUpdatePayload {
+  regionId: string;
+  diff: CompactDiff;
+  fromHash: string;
   hash: string;
   templateData: unknown;
 }

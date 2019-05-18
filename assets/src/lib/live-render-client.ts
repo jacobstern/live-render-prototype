@@ -7,7 +7,9 @@ import {
   ClientUpdateAckPayload,
   ClickEventPayload,
   FullUpdatePayload,
+  DiffUpdatePayload,
 } from '../../../common/types';
+import { applyCompactDiff } from '../../../common/diff';
 
 function onDocumentReady(callback: VoidFunction) {
   if (document.readyState === 'interactive' || document.readyState === 'complete') {
@@ -88,6 +90,7 @@ export class LiveSocket {
     this.socket = socket;
     socket.on('live:init', this.handleInit);
     socket.on('live:fullUpdate', this.handleFullUpdate);
+    socket.on('live:diffUpdate', this.handleDiffUpdate);
   }
 
   connect(): SocketIOClient.Socket {
@@ -153,6 +156,22 @@ export class LiveSocket {
       region.source = payload.source;
       region.hash = payload.hash;
       this.emitUpdateAck([region]);
+    }
+  };
+
+  private handleDiffUpdate = (payload: DiffUpdatePayload) => {
+    const region = this.liveRegions[payload.regionId];
+    if (region) {
+      const source = region.source;
+      if (source != null && payload.fromHash === region.hash) {
+        const updated = applyCompactDiff(source, payload.diff);
+        this.morphRegion(region, updated);
+        region.source = updated;
+        region.hash = payload.hash;
+        this.emitUpdateAck([region]);
+      } else {
+        throw new Error('Received erroneous diff update');
+      }
     }
   };
 

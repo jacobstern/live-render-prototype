@@ -1,8 +1,9 @@
 import { Response, Request, Handler, RequestHandler } from 'express';
-import { SafeString, template } from 'handlebars';
+import { SafeString } from 'handlebars';
 import uniqid from 'uniqid';
 import crypto from 'crypto';
 import http from 'http';
+import diff from 'fast-diff';
 import {
   ClientReadyPayload,
   RegionInit,
@@ -10,8 +11,10 @@ import {
   ClientUpdateAckPayload,
   ClickEventPayload,
   FullUpdatePayload,
+  DiffUpdatePayload,
 } from '../common/types';
 import { EventEmitter } from 'events';
+import { CompactDiff } from '../common/diff';
 
 function hashSource(source: string): string {
   return crypto
@@ -69,6 +72,19 @@ export interface LiveRenderExpressInstance {
   listen(server: SocketIO.Server | SocketIO.Namespace): SocketIO.Namespace;
   getMiddleware(): Handler;
   useGateway(templatePath: string, gateway: LiveGateway): this;
+}
+
+function computeCompactDiff(from: string, to: string): CompactDiff {
+  return diff(from, to).map(([type, text]) => {
+    switch (type) {
+      case 1:
+        return [1, text];
+      case 0:
+        return [0, text.length];
+      case -1:
+        return [-1, text.length];
+    }
+  });
 }
 
 class DefaultInstance implements LiveRenderExpressInstance {
@@ -190,6 +206,8 @@ class DefaultInstance implements LiveRenderExpressInstance {
         if (err) throw err;
         const region: any = session.liveRender.regions[regionId];
         if (region) {
+          const priorSource = region.source;
+          const priorHash = region.hash;
           const source = await this.renderTemplate(region.templatePath, templateData);
           const hash = hashSource(source);
           region.source = source;
@@ -197,13 +215,28 @@ class DefaultInstance implements LiveRenderExpressInstance {
           region.templateData = templateData;
           session.save(err => {
             if (err) throw err;
-            const payload: FullUpdatePayload = {
-              regionId,
-              source,
-              hash,
-              templateData,
-            };
-            socket.emit('live:fullUpdate', payload);
+            const region = session.liveRender.regions[regionId];
+            if (region) {
+              const acked = region.acked[socket.id];
+              if (acked != null && acked.hash === priorHash) {
+                const payload: DiffUpdatePayload = {
+                  regionId,
+                  diff: computeCompactDiff(priorSource, source),
+                  fromHash: priorHash,
+                  hash,
+                  templateData,
+                };
+                socket.emit('live:diffUpdate', payload);
+              } else {
+                const payload: FullUpdatePayload = {
+                  regionId,
+                  source,
+                  hash,
+                  templateData,
+                };
+                socket.emit('live:fullUpdate', payload);
+              }
+            }
           });
         }
       });
