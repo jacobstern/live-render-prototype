@@ -1,7 +1,6 @@
-import { Request, Response } from 'express';
 import { stringUnionHash } from '../handlebars-utils';
 
-export function show(_req: Request, res: Response) {
+export function show(_req: Express.Request, res: Express.Response) {
   res.liveRender('counter.hbs', {
     title: 'Counter',
     nav: stringUnionHash('counter'),

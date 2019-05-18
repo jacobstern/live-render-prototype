@@ -1,7 +1,6 @@
 import compression from 'compression';
 import path from 'path';
 import express, { NextFunction, Request, Response } from 'express';
-import Handlebars from 'handlebars';
 import helmet from 'helmet';
 import logger from 'morgan';
 import favicon from 'serve-favicon';
@@ -11,7 +10,7 @@ import sessionMiddleware from './session-middleware';
 import { StatusError } from './errors';
 import expressHandlebars from './express-handlebars';
 import counterRoutes from './counter/router';
-import precompiledPartials from './middleware/precompiled-partials';
+import eventStreamRoutes from './event-stream/router';
 
 const app = express();
 
@@ -35,6 +34,7 @@ app.use(liveRender.getMiddleware());
 
 app.use('/', counterRoutes);
 app.use('/counter', counterRoutes);
+app.use('/event-stream', eventStreamRoutes);
 
 app.use((_req, _res, next) => {
   next(new StatusError('Not Found', 404));

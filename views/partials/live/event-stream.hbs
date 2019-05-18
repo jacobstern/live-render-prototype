@@ -1,0 +1,27 @@
+<section class="section">
+  <div class="container">
+    <h1 class="title">Event Stream</h1>
+
+    <div class="content">
+      <p>Stream recent changes to Wikipedia via the
+        <a href="https://www.mediawiki.org/wiki/API:Recent_changes_stream">Recent Changes API</a>.
+      </p>
+    </div>
+
+    <div class="buttons">
+      {{#if streaming}}
+        <button class="button" data-live-click="startStreaming">
+          Stop Streaming
+        </button>
+      {{else}}
+        <button class="button is-primary" data-live-click="startStreaming">
+          Start Streaming
+        </button>
+      {{/if}}
+    </div>
+
+    <div class="content">
+      
+    </div>
+  </div>
+</section>
