@@ -1,12 +1,17 @@
 {
   "name": "live-render-prototype",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "build/src/server.js",
   "repository": "https://github.com/jacobstern/live-render-prototype",
   "author": "Jacob Stern",
   "license": "MIT",
   "scripts": {
-    "dev": "node scripts/dev.js"
+    "precopy": "shx mkdir -p build/",
+    "copy": "shx cp -r public/ views/ build/",
+    "dev": "node scripts/dev.js",
+    "prebuild": "yarn copy",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node build/src/server.js"
   },
   "devDependencies": {
     "chalk": "^2.4.2",
@@ -14,6 +19,7 @@
     "parcel-bundler": "^1.12.3",
     "prettier": "^1.17.0",
     "rimraf": "^2.6.3",
+    "shx": "^0.3.2",
     "ts-node": "^8.1.0",
     "ts-node-dev": "^1.0.0-pre.39",
     "yarn": "^1.16.0"
