@@ -1,10 +1,16 @@
 import { Response, Request, Handler, RequestHandler } from 'express';
-import { SafeString } from 'handlebars';
+import { SafeString, template } from 'handlebars';
 import uniqid from 'uniqid';
 import crypto from 'crypto';
 import http from 'http';
-import sessionMiddleware from './session-middleware';
-import { ClientReadyPayload, RegionInit } from '../common/types';
+import {
+  ClientReadyPayload,
+  RegionInit,
+  InitPayload,
+  ClientUpdateAckPayload,
+  ClickEventPayload,
+} from '../common/types';
+import { EventEmitter } from 'events';
 
 function hashSource(source: string): string {
   return crypto
@@ -30,24 +36,53 @@ declare global {
   }
 }
 
+export interface Client {
+  update(templateData: unknown): this;
+}
+
+class DefaultClient implements Client {
+  constructor(private updateDelegate: (templateData: unknown) => void) {}
+
+  update(templateData: unknown): this {
+    this.updateDelegate(templateData);
+    return this;
+  }
+}
+
+export interface ClickMessage {
+  type: 'click';
+  templateData: unknown;
+}
+
+export type UserEventMessage = ClickMessage;
+
+export class LiveGateway extends EventEmitter {
+  on(userEvent: string, callback: (client: Client, message: UserEventMessage) => void): this;
+
+  on(event: string, callback: (...args: any[]) => void): this {
+    return super.on(event, callback);
+  }
+}
+
 export interface LiveRenderExpressInstance {
   listen(server: SocketIO.Server | SocketIO.Namespace): SocketIO.Namespace;
   getMiddleware(): Handler;
+  useGateway(templatePath: string, gateway: LiveGateway): this;
 }
 
 class DefaultInstance implements LiveRenderExpressInstance {
-  private sessionMiddleware: RequestHandler;
+  private session: RequestHandler;
+  private gateways: Record<string, LiveGateway | undefined> = {};
 
   constructor(options: LiveRenderExpressOptions) {
-    this.sessionMiddleware = options.session;
+    this.session = options.session;
   }
 
   listen(server: SocketIO.Server | SocketIO.Namespace): SocketIO.Namespace {
     server.use((socket, next) => {
-      // TODO: Probably don't want/need to rely on express-session directly
       // Danger zone!
       const req = socket.handshake as any;
-      sessionMiddleware(req, new http.ServerResponse(req) as any, next);
+      this.session(req, new http.ServerResponse(req) as any, next);
     });
     return server.on('connection', this.handleConnection.bind(this));
   }
@@ -59,33 +94,86 @@ class DefaultInstance implements LiveRenderExpressInstance {
     };
   }
 
-  private async handleConnection(socket: SocketIO.Socket) {
+  useGateway(templatePath: string, gateway: LiveGateway): this {
+    const normalizedPath = this.normalizeGatewayPath(templatePath);
+    this.gateways[normalizedPath] = gateway;
+    return this;
+  }
+
+  private handleConnection(socket: SocketIO.Socket) {
     const session = socket.handshake.session;
     if (session == null) {
       throw new Error('Session uninitialized in socket, likely liveRender internal error');
     }
-    session.touch(err => {
+    session.reload(err => {
       if (err) throw err; // I guess?
     });
     let regionIds: string[] = [];
-    socket.on('live:ready', (payload: ClientReadyPayload) => {
-      regionIds = payload.regionIds;
-      session.reload(err => {
-        if (err) throw err;
-        const regions: Record<string, RegionInit | undefined> = {};
-        for (const id of regionIds) {
-          const region: any = session.liveRender.regions[id];
+    socket
+      .on('live:clickEvent', ({ regionId, eventName }: ClickEventPayload) => {
+        session.reload(err => {
+          if (err) throw err;
+          const region: any = session.liveRender.regions[regionId];
           if (region) {
-            regions[id] = {
-              source: region.source,
-              hash: region.hash,
-              templateData: region.templateData,
-            };
+            const gateway = this.getGateway(region.templatePath);
+            if (gateway && gateway.eventNames().includes(eventName)) {
+              const message: ClickMessage = {
+                type: 'click',
+                templateData: region.templateData,
+              };
+              gateway.emit(eventName, message);
+            }
           }
-        }
-        socket.emit('live:init', { regions });
+        });
+      })
+      .on('live:ready', (payload: ClientReadyPayload) => {
+        regionIds = payload.regionIds;
+        session.reload(err => {
+          if (err) throw err;
+          const regions: Record<string, RegionInit | undefined> = {};
+          for (const id of regionIds) {
+            const region: any = session.liveRender.regions[id];
+            if (region) {
+              regions[id] = {
+                source: region.source,
+                hash: region.hash,
+                templateData: region.templateData,
+              };
+            }
+          }
+          const payload: InitPayload = { regions };
+          socket.emit('live:init', payload);
+        });
+      })
+      .on('live:updateAck', (payload: ClientUpdateAckPayload) => {
+        session.reload(err => {
+          if (err) throw err;
+          Object.keys(payload.regions).forEach(id => {
+            const region: any = session.liveRender.regions[id];
+            if (region) {
+              region.acked[socket.id] = payload.regions[id];
+            }
+          });
+          session.save(err => {
+            if (err) throw err;
+          });
+        });
       });
-    });
+  }
+
+  private normalizeGatewayPath(templatePath: string) {
+    if (templatePath.startsWith('/')) {
+      templatePath = templatePath.slice(1);
+    }
+    if (templatePath.endsWith('/')) {
+      templatePath = templatePath.slice(0, templatePath.length - 1);
+    }
+    return templatePath;
+  }
+
+  private getGateway(templatePath: string): LiveGateway | undefined {
+    const normalizedPath = this.normalizeGatewayPath(templatePath);
+    return this.gateways[normalizedPath];
   }
 }
 
@@ -116,7 +204,12 @@ function liveRender(this: Response, view: string, arg2?: unknown, arg3?: unknown
   this.render(view, options, callback);
 }
 
-function registerLiveTemplate(req: Request, source: string, templateData: unknown): string {
+function registerLiveTemplate(
+  req: Request,
+  templatePath: string,
+  source: string,
+  templateData: unknown
+): string {
   const regionId = uniqid();
   const hash = hashSource(source);
   const session = req.session;
@@ -129,6 +222,7 @@ function registerLiveTemplate(req: Request, source: string, templateData: unknow
     id: regionId,
     source,
     hash,
+    templatePath,
     templateData,
     acked: {},
   };
@@ -172,7 +266,7 @@ function liveHelper(this: Response, arg1: unknown, arg2?: unknown, arg3?: unknow
   }
   const source: string = partial(context);
   // this.req should be initialized at this point since middleware has run
-  const regionId = registerLiveTemplate(this.req!, source, context);
+  const regionId = registerLiveTemplate(this.req!, partialName, source, context);
   return new SafeString(makeBeginComment(regionId) + source + makeEndComment(regionId));
 }
 

@@ -1,6 +1,11 @@
 import io from 'socket.io-client';
 import morphdom from 'morphdom';
-import { ClientReadyPayload, InitPayload, RegionInit } from '../../../common/types';
+import {
+  ClientReadyPayload,
+  InitPayload,
+  RegionInit,
+  ClientUpdateAckPayload,
+} from '../../../common/types';
 
 function onDocumentReady(callback: VoidFunction) {
   if (document.readyState === 'interactive' || document.readyState === 'complete') {
@@ -13,6 +18,8 @@ function onDocumentReady(callback: VoidFunction) {
 interface LiveRegion {
   nodes: Node[];
   id: string;
+  source?: string;
+  hash?: string;
 }
 
 const REGION_BEGIN_COMMENT_REGEX = /live-begin: (\S+)/;
@@ -105,14 +112,31 @@ export class LiveSocket {
   }
 
   private handleInit = (payload: InitPayload) => {
+    const updatedRegions: LiveRegion[] = [];
     Object.keys(payload.regions).forEach(id => {
       const regionInit = payload.regions[id] as RegionInit;
       const region = this.liveRegions[id];
       if (region) {
         this.morphRegion(region, regionInit.source);
+        region.hash = regionInit.hash;
+        region.source = regionInit.source;
+        updatedRegions.push(region);
       }
     });
+    this.emitUpdateAck(updatedRegions);
   };
+
+  private emitUpdateAck(updatedRegions: LiveRegion[]): void {
+    const payload: ClientUpdateAckPayload = {
+      regions: {},
+    };
+    updatedRegions.forEach(region => {
+      if (region.hash) {
+        payload.regions[region.id] = { hash: region.hash };
+      }
+    });
+    this.socket.emit('live:updateAck', payload);
+  }
 
   private morphRegion(region: LiveRegion, source: string) {
     if (region.nodes.length === 0) {

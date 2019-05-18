@@ -11,3 +11,16 @@ export interface RegionInit {
 export interface InitPayload {
   regions: Record<string, RegionInit | undefined>;
 }
+
+export interface RegionAck {
+  hash: string;
+}
+
+export interface ClientUpdateAckPayload {
+  regions: Record<string, RegionAck | undefined>;
+}
+
+export interface ClickEventPayload {
+  regionId: string;
+  eventName: string;
+}
