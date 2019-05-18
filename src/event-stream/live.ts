@@ -1,6 +1,5 @@
 import { LiveGateway } from '../live-render-express';
 import EventSource from 'eventsource';
-import debounce from 'debounce';
 
 const gateway = new LiveGateway();
 
@@ -22,18 +21,12 @@ gateway.on('startStreaming', client => {
   eventSource.onopen = () => {
     client.update({ streaming: true });
   };
-  const debouncedUpdate = debounce(() => {
-    // This implementation doesn't do very well when spamming the client with messages
-    if (eventSource.readyState !== EventSource.CLOSED) {
-      client.update({ streaming: true, messages });
-    }
-  }, 300);
   eventSource.onmessage = event => {
     const message: Message = JSON.parse(event.data);
-    if (message.server_url === 'https://en.wikipedia.org' && !message.bot) {
+    if (message.server_url === 'https://en.wikipedia.org') {
       messages.unshift(message);
       messages.splice(50);
-      debouncedUpdate();
+      client.update({ streaming: true, messages });
     }
   };
   client.on('stopStreaming', message => {

@@ -193,18 +193,19 @@ class DefaultInstance implements LiveRenderExpressInstance {
           socket.emit('live:init', payload);
         });
       })
-      .on('live:updateAck', (payload: ClientUpdateAckPayload) => {
+      .on('live:desync', ({ regionId }: any) => {
         session.reload(err => {
           if (err) throw err;
-          Object.keys(payload.regions).forEach(id => {
-            const region: any = session.liveRender.regions[id];
-            if (region) {
-              region.acked[socket.id] = payload.regions[id];
-            }
-          });
-          session.save(err => {
-            if (err) throw err;
-          });
+          const region: any = session.liveRender.regions[regionId];
+          if (region) {
+            const payload: FullUpdatePayload = {
+              regionId,
+              source: region.source,
+              hash: region.hash,
+              templateData: region.templateData,
+            };
+            socket.emit('live:fullUpdate', payload);
+          }
         });
       });
   }
@@ -246,25 +247,14 @@ class DefaultInstance implements LiveRenderExpressInstance {
             if (err) throw err;
             const region = session.liveRender.regions[regionId];
             if (region) {
-              const acked = region.acked[socket.id];
-              if (acked != null && acked.hash === priorHash) {
-                const payload: DiffUpdatePayload = {
-                  regionId,
-                  diff: computeCompactDiff(priorSource, source),
-                  fromHash: priorHash,
-                  hash,
-                  templateData,
-                };
-                socket.emit('live:diffUpdate', payload);
-              } else {
-                const payload: FullUpdatePayload = {
-                  regionId,
-                  source,
-                  hash,
-                  templateData,
-                };
-                socket.emit('live:fullUpdate', payload);
-              }
+              const payload: DiffUpdatePayload = {
+                regionId,
+                diff: computeCompactDiff(priorSource, source),
+                fromHash: priorHash,
+                hash,
+                templateData,
+              };
+              socket.emit('live:diffUpdate', payload);
             }
           });
         }
@@ -328,7 +318,6 @@ function registerLiveTemplate(
     hash,
     templatePath,
     templateData,
-    acked: {},
   };
   return regionId;
 }

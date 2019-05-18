@@ -4,7 +4,6 @@ import {
   ClientReadyPayload,
   InitPayload,
   RegionInit,
-  ClientUpdateAckPayload,
   ClickEventPayload,
   FullUpdatePayload,
   DiffUpdatePayload,
@@ -134,7 +133,6 @@ export class LiveSocket {
         updatedRegions.push(region);
       }
     });
-    this.emitUpdateAck(updatedRegions);
   };
 
   private handleClick = (event: MouseEvent) => {
@@ -150,13 +148,11 @@ export class LiveSocket {
   };
 
   private handleFullUpdate = (payload: FullUpdatePayload) => {
-    console.log('full update');
     const region = this.liveRegions[payload.regionId];
     if (region) {
       this.morphRegion(region, payload.source);
       region.source = payload.source;
       region.hash = payload.hash;
-      this.emitUpdateAck([region]);
     }
   };
 
@@ -169,23 +165,15 @@ export class LiveSocket {
         this.morphRegion(region, updated);
         region.source = updated;
         region.hash = payload.hash;
-        this.emitUpdateAck([region]);
       } else {
-        throw new Error('Received erroneous diff update');
+        this.emitDesync(region);
       }
     }
   };
 
-  private emitUpdateAck(updatedRegions: LiveRegion[]): void {
-    const payload: ClientUpdateAckPayload = {
-      regions: {},
-    };
-    updatedRegions.forEach(region => {
-      if (region.hash) {
-        payload.regions[region.id] = { hash: region.hash };
-      }
-    });
-    this.socket.emit('live:updateAck', payload);
+  private emitDesync(region: LiveRegion) {
+    console.warn('desync!');
+    this.socket.emit('live:desync', { regionId: region.id });
   }
 
   private emitClickEvent(regionId: string, eventName: string): void {

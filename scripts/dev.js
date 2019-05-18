@@ -88,7 +88,12 @@ function reportDiagnostic(diagnostic) {
  * This is mainly for messages like "Starting compilation" or "Compilation completed".
  */
 function reportWatchStatusChanged(diagnostic) {
-  console.info(formatDiagnostic(diagnostic));
+  const formatted = formatDiagnostic(diagnostic);
+  if (/Found 0 errors/.test(formatted)) {
+    console.info(chalk.green(formatted));
+  } else {
+    console.info(formatted);
+  }
 }
 
 main();
