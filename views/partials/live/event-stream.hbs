@@ -3,7 +3,7 @@
     <h1 class="title">Event Stream</h1>
 
     <div class="content">
-      <p>Stream recent changes to Wikipedia via the
+      <p>Stream recent changes to the English Wikipedia via the
         <a href="https://www.mediawiki.org/wiki/API:Recent_changes_stream">Recent Changes API</a>.
       </p>
     </div>
@@ -22,7 +22,13 @@
     </div>
 
     <div class="content">
-
+      <ul>
+        {{#each messages}}
+          <li>
+            Change by <b>{{user}}</b>{{#if parsedcomment}}:&nbsp;{{{parsedcomment}}}{{/if}}
+          </li>
+        {{/each}}
+      </ul>
     </div>
   </div>
 </section>

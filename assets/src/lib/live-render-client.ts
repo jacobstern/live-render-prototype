@@ -86,7 +86,7 @@ export class LiveSocket {
   private socket: SocketIOClient.Socket;
 
   constructor(url: string) {
-    const socket = io(url, { autoConnect: false });
+    const socket = io(url, { autoConnect: false, transports: ['websocket', 'polling'] });
     this.socket = socket;
     socket.on('live:init', this.handleInit);
     socket.on('live:fullUpdate', this.handleFullUpdate);
@@ -150,6 +150,7 @@ export class LiveSocket {
   };
 
   private handleFullUpdate = (payload: FullUpdatePayload) => {
+    console.log('full update');
     const region = this.liveRegions[payload.regionId];
     if (region) {
       this.morphRegion(region, payload.source);
@@ -217,6 +218,12 @@ export class LiveSocket {
             node.removeEventListener('click', this.handleClick);
           }
         },
+        onBeforeElUpdated: function(fromEl, toEl) {
+          if (fromEl.isEqualNode && fromEl.isEqualNode(toEl)) {
+            return false;
+          }
+          return true;
+        },
       });
       // We may have added or removed nodes from the template, so recompute region.nodes
       region.nodes = [];
@@ -230,14 +237,16 @@ export class LiveSocket {
   }
 
   private getRootRegion(element: Element): LiveRegion | undefined {
-    return Object.values(this.liveRegions).find(region => {
-      if (region == null) {
-        return false;
-      }
-      return region.nodes.some(node => {
-        return node.contains(element);
+    return Object.keys(this.liveRegions)
+      .map(key => this.liveRegions[key])
+      .find(region => {
+        if (region == null) {
+          return false;
+        }
+        return region.nodes.some(node => {
+          return node.contains(element);
+        });
       });
-    });
   }
 }
 
