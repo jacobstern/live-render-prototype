@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "chalk": "^2.4.2",
+    "cross-spawn": "^6.0.5",
     "livereload": "^0.7.0",
     "parcel-bundler": "^1.12.3",
     "prettier": "^1.17.0",

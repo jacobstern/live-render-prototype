@@ -2,7 +2,7 @@ const chalk = require('chalk');
 const ts = require('typescript');
 const Bundler = require('parcel-bundler');
 const path = require('path');
-const child_process = require('child_process');
+const spawn = require('cross-spawn');
 const livereload = require('livereload');
 
 const formatHost = {
@@ -53,7 +53,7 @@ async function main() {
   });
   await bundler.bundle();
 
-  const tsNodeDev = child_process.spawn(
+  const tsNodeDev = spawn(
     'ts-node-dev',
     '--respawn --transpileOnly --no-notify --debounce 800 -- src/server.ts'.split(/\s+/)
   );
