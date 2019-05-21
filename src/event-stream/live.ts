@@ -1,4 +1,4 @@
-import { LiveGateway } from '../live-render-express';
+import { LiveGateway, ClickMessage } from '../live-render-express';
 import EventSource from 'eventsource';
 
 const gateway = new LiveGateway();

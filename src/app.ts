@@ -11,6 +11,7 @@ import { StatusError } from './errors';
 import expressHandlebars from './express-handlebars';
 import counterRoutes from './counter/router';
 import eventStreamRoutes from './event-stream/router';
+import formRoutes from './form/router';
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use(liveRender.getMiddleware());
 app.use('/', counterRoutes);
 app.use('/counter', counterRoutes);
 app.use('/event-stream', eventStreamRoutes);
+app.use('/form', formRoutes);
 
 app.use((_req, _res, next) => {
   next(new StatusError('Not Found', 404));

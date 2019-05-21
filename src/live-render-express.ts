@@ -11,6 +11,9 @@ import {
   ClickEventPayload,
   FullUpdatePayload,
   DiffUpdatePayload,
+  ElementInfo,
+  FormInfo,
+  FormChangeEventPayload,
 } from '../common/types';
 import { EventEmitter } from 'events';
 import { CompactDiff } from '../common/diff';
@@ -85,9 +88,16 @@ class DefaultClient extends EventEmitter implements Client {
 export interface ClickMessage {
   type: 'click';
   templateData: unknown;
+  sender: ElementInfo;
 }
 
-export type UserEventMessage = ClickMessage;
+export interface FormChangeMessage {
+  type: 'formChange';
+  templateData: unknown;
+  sender: FormInfo;
+}
+
+export type UserEventMessage = ClickMessage | FormChangeMessage;
 
 const RESERVED_GATEWAY_EVENTS = ['ready'];
 
@@ -169,19 +179,41 @@ class DefaultInstance implements LiveRenderExpressInstance {
     });
     let regionIds: string[] = [];
     socket
-      .on('live:clickEvent', ({ regionId, eventName }: ClickEventPayload) => {
+      .on('live:clickEvent', ({ regionId, event, sender }: ClickEventPayload) => {
         session.reload(err => {
           if (err) throw err;
           const region: any = session.liveRender.regions[regionId];
           if (region) {
             const gateway = this.getGateway(region.templatePath);
-            if (gateway && !RESERVED_GATEWAY_EVENTS.includes(eventName)) {
+            if (gateway && !RESERVED_GATEWAY_EVENTS.includes(event)) {
               const message: ClickMessage = {
                 type: 'click',
                 templateData: region.templateData,
+                sender,
               };
               gateway.emit(
-                eventName,
+                event,
+                this.makeClient(gateway, socket, regionId, session),
+                message
+              );
+            }
+          }
+        });
+      })
+      .on('live:formChangeEvent', ({ regionId, event, sender }: FormChangeEventPayload) => {
+        session.reload(err => {
+          if (err) throw err;
+          const region: any = session.liveRender.regions[regionId];
+          if (region) {
+            const gateway = this.getGateway(region.templatePath);
+            if (gateway && !RESERVED_GATEWAY_EVENTS.includes(event)) {
+              const message: FormChangeMessage = {
+                type: 'formChange',
+                templateData: region.templateData,
+                sender,
+              };
+              gateway.emit(
+                event,
                 this.makeClient(gateway, socket, regionId, session),
                 message
               );
@@ -221,7 +253,6 @@ class DefaultInstance implements LiveRenderExpressInstance {
               regionId,
               source: region.source,
               hash: region.hash,
-              templateData: region.templateData,
             };
             socket.emit('live:fullUpdate', payload);
           }
@@ -271,7 +302,6 @@ class DefaultInstance implements LiveRenderExpressInstance {
                 diff: computeCompactDiff(priorSource, source),
                 fromHash: priorHash,
                 hash,
-                templateData,
               };
               socket.emit('live:diffUpdate', payload);
             }

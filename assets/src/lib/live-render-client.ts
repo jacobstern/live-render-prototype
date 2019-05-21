@@ -7,6 +7,10 @@ import {
   ClickEventPayload,
   FullUpdatePayload,
   DiffUpdatePayload,
+  FormChangeEventPayload,
+  ElementInfo,
+  FormInfo,
+  LeanFormData,
 } from '../../../common/types';
 import { applyCompactDiff } from '../../../common/diff';
 
@@ -80,6 +84,63 @@ function enumerateLiveRegions(root: Node): LiveRegion[] {
   return liveRegions;
 }
 
+function isElementNode(node: Node): node is Element {
+  return node.nodeType === Node.ELEMENT_NODE;
+}
+
+function normalizeLineBreaks(value: string): string {
+  return value.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n');
+}
+
+function getLeanFormData(form: HTMLFormElement): LeanFormData {
+  // Ported from https://github.com/jimmywarting/FormData/blob/master/FormData.js
+  const data: LeanFormData = {};
+  const elements = form.elements;
+  for (let i = 0; i < elements.length; i++) {
+    const element: any = elements[i];
+    if (
+      element.name === '' ||
+      element.disabled ||
+      element.type === 'submit' ||
+      element.type === 'button'
+    )
+      continue;
+    if (element.type === 'select-multiple' || element.type === 'select-one') {
+      const options: HTMLOptionsCollection = element.options;
+      for (let i = 0; i < options.length; i++) {
+        const option = options[i];
+        if (!option.disabled && option.selected) {
+          data[element.name] = option.value;
+        }
+      }
+    } else if (element.type === 'checkbox' || element.type === 'radio') {
+      if (element.checked) {
+        data[element.name] = element.value;
+      }
+    } else if (element.type === 'textarea') {
+      data[element.name] = normalizeLineBreaks(element.value);
+    } else {
+      data[element.name] = element.value;
+    }
+  }
+  return data;
+}
+
+function getElementInfo(element: HTMLElement | SVGElement): ElementInfo {
+  return {
+    id: element.id,
+    dataset: element.dataset,
+    nodeName: element.nodeName,
+  };
+}
+
+function getFormInfo(form: HTMLFormElement): FormInfo {
+  return Object.assign(getElementInfo(form), {
+    name: form.name,
+    data: getLeanFormData(form),
+  });
+}
+
 export class LiveSocket {
   private liveRegions: Record<string, LiveRegion | undefined> = {};
   private pendingElements: HTMLElement[] = [];
@@ -113,6 +174,9 @@ export class LiveSocket {
         element.addEventListener('click', this.handleClick);
       }
     });
+    document.querySelectorAll('[data-live-change]').forEach(element => {
+      element.addEventListener('change', this.handleChange);
+    });
   }
 
   private emitReady() {
@@ -138,14 +202,25 @@ export class LiveSocket {
 
   private handleClick = (event: MouseEvent) => {
     event.preventDefault();
-    const target = event.currentTarget as HTMLElement;
-    const eventName = target.getAttribute('data-live-click');
+    const currentTarget = event.currentTarget as HTMLElement;
+    const eventName = currentTarget.getAttribute('data-live-click');
     if (eventName) {
-      const region = this.getRootRegion(target);
+      const region = this.getRootRegion(currentTarget);
       if (region) {
-        this.emitClickEvent(region.id, eventName);
-        this.applyPendingClass(target);
-        this.pendingElements.push(target);
+        this.emitClickEvent(region.id, eventName, currentTarget);
+        this.applyPendingClass(currentTarget);
+        this.pendingElements.push(currentTarget);
+      }
+    }
+  };
+
+  private handleChange = (event: Event) => {
+    const currentTarget = event.currentTarget as HTMLFormElement;
+    const eventName = currentTarget.dataset.liveChange;
+    if (eventName) {
+      const region = this.getRootRegion(currentTarget);
+      if (region) {
+        this.emitFormChangeEvent(region.id, eventName, currentTarget);
       }
     }
   };
@@ -179,9 +254,26 @@ export class LiveSocket {
     this.socket.emit('live:desync', { regionId: region.id });
   }
 
-  private emitClickEvent(regionId: string, eventName: string): void {
-    const payload: ClickEventPayload = { regionId, eventName };
+  private emitClickEvent(
+    regionId: string,
+    event: string,
+    sender: HTMLElement | SVGElement
+  ): void {
+    const payload: ClickEventPayload = {
+      regionId,
+      event,
+      sender: getElementInfo(sender),
+    };
     this.socket.emit('live:clickEvent', payload);
+  }
+
+  private emitFormChangeEvent(regionId: string, event: string, sender: HTMLFormElement): void {
+    const payload: FormChangeEventPayload = {
+      regionId,
+      event,
+      sender: getFormInfo(sender),
+    };
+    this.socket.emit('live:formChangeEvent', payload);
   }
 
   private morphRegion(region: LiveRegion, source: string) {
@@ -203,6 +295,13 @@ export class LiveSocket {
           if (node instanceof HTMLElement && node.getAttribute('data-live-click')) {
             node.addEventListener('click', this.handleClick);
           }
+          if (
+            node instanceof HTMLElement &&
+            node.dataset.liveChange &&
+            node.tagName === 'FORM'
+          ) {
+            node.addEventListener('change', this.handleChange);
+          }
           return node;
         },
         onNodeDiscarded: node => {
@@ -211,18 +310,24 @@ export class LiveSocket {
           }
         },
         onBeforeElUpdated: (fromEl, toEl) => {
-          if (fromEl.isEqualNode && fromEl.isEqualNode(toEl)) {
+          if (toEl.tagName === 'INPUT') {
+            // No "controlled" inputs, for now at least
+            const fromInput = fromEl as HTMLInputElement;
+            const toInput = toEl as HTMLInputElement;
+            toInput.value = fromInput.value;
+            toInput.checked = fromInput.checked;
+          }
+          if (typeof fromEl.isEqualNode === 'function' && fromEl.isEqualNode(toEl)) {
             return false;
           }
           return true;
         },
-        getNodeKey: node => {
-          if (node instanceof HTMLElement) {
-            const key = node.getAttribute('data-live-key') || node.id;
-            if (key) {
-              return key;
-            }
+        getNodeKey: (node: any /* Node */) => {
+          let key = node.id;
+          if (node.dataset && node.dataset.liveKey) {
+            key = node.dataset.liveKey;
           }
+          return key;
         },
       });
       // We may have added or removed nodes from the template, so recompute region.nodes
