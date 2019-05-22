@@ -141,9 +141,14 @@ function getFormInfo(form: HTMLFormElement): FormInfo {
   });
 }
 
+interface PendingElement {
+  element: HTMLElement;
+  didApplyDisabledProp: boolean;
+}
+
 export class LiveSocket {
   private liveRegions: Record<string, LiveRegion | undefined> = {};
-  private pendingElements: HTMLElement[] = [];
+  private pendingElements: PendingElement[] = [];
   private socket: SocketIOClient.Socket;
 
   constructor(url: string) {
@@ -208,8 +213,7 @@ export class LiveSocket {
       const region = this.getRootRegion(currentTarget);
       if (region) {
         this.emitClickEvent(region.id, eventName, currentTarget);
-        this.applyPendingClass(currentTarget);
-        this.pendingElements.push(currentTarget);
+        this.pendingElements.push(this.setPendingState(currentTarget));
       }
     }
   };
@@ -344,9 +348,11 @@ export class LiveSocket {
           active.focus();
         }
       }
-      // Restore pending class if necessary
-      this.pendingElements.forEach(element => {
-        this.applyPendingClass(element);
+      const pendingElements = this.pendingElements;
+      this.pendingElements = [];
+      pendingElements.forEach(({ element }) => {
+        // Restore pending class if necessary
+        this.pendingElements.push(this.setPendingState(element));
       });
     }
   }
@@ -362,17 +368,28 @@ export class LiveSocket {
     });
   }
 
-  private applyPendingClass(element: HTMLElement): void {
+  private setPendingState(element: HTMLElement): PendingElement {
     const className = this.getPendingClassName(element);
+    let didApplyDisabledProp = false;
     if (element.classList) {
       element.classList.add(className);
     }
+    const elemProps: Record<string, unknown> = element as Record<string, unknown>;
+    if (element.tagName === 'BUTTON' && !elemProps.disabled) {
+      elemProps.disabled = true;
+      didApplyDisabledProp = true;
+    }
+    return { element, didApplyDisabledProp };
   }
 
-  private removePendingClass(element: HTMLElement): void {
+  private clearPendingState({ element, didApplyDisabledProp }: PendingElement): void {
     const className = this.getPendingClassName(element);
     if (element.classList) {
       element.classList.remove(className);
+    }
+    const elemProps: Record<string, unknown> = element as Record<string, unknown>;
+    if (didApplyDisabledProp) {
+      elemProps.disabled = false;
     }
   }
 
@@ -386,7 +403,7 @@ export class LiveSocket {
 
   private resetPendingElements(): void {
     this.pendingElements.forEach(element => {
-      this.removePendingClass(element);
+      this.clearPendingState(element);
     });
     this.pendingElements = [];
   }
