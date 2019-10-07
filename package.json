@@ -11,9 +11,8 @@
     "precopy": "shx mkdir -p build/",
     "copy": "shx cp -r public/ views/ build/",
     "dev": "node scripts/dev.js",
-    "prebuild": "yarn copy",
     "ts": "tsc -p tsconfig.build.json",
-    "build": "run-s assets ts",
+    "build": "run-s assets copy ts",
     "start": "node build/src/server.js",
     "start:cross-env": "cross-env NODE_ENV=production yarn start"
   },
