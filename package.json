@@ -13,7 +13,7 @@
     "dev": "node scripts/dev.js",
     "prebuild": "yarn copy",
     "ts": "tsc -p tsconfig.build.json",
-    "build": "run-p assets ts",
+    "build": "run-s assets ts",
     "start": "node build/src/server.js",
     "start:cross-env": "cross-env NODE_ENV=production yarn start"
   },
