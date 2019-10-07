@@ -24,7 +24,7 @@
     "rimraf": "^3.0.0",
     "ts-node": "^8.1.0",
     "ts-node-dev": "^1.0.0-pre.39",
-    "yarn": "^1.16.0"
+    "yarn": "^1.17.3"
   },
   "dependencies": {
     "@types/compression": "0.0.36",
