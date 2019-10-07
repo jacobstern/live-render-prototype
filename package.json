@@ -6,7 +6,7 @@
   "author": "Jacob Stern",
   "license": "MIT",
   "scripts": {
-    "assets": "parcel build \"assets/src/main.ts\" --out-dir public/build --public-url ./",
+    "assets": "parcel build \"assets/src/main.ts\" --out-dir public/assets --public-url ./",
     "assets:clean": "rimraf public/build",
     "precopy": "shx mkdir -p build/",
     "copy": "shx cp -r public/ views/ build/",
