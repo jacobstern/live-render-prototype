@@ -63,6 +63,6 @@
     "socket.io-client": "^2.2.0",
     "typescript": "^3.4.5",
     "uniqid": "^5.0.3",
-    "validator": "^10.11.0"
+    "validator": "^13.7.0"
   }
 }
