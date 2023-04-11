@@ -48,7 +48,7 @@ async function main() {
   livereloadServer.watch([path.resolve(rootDir, 'views/')]);
 
   const bundler = new Bundler('assets/src/main.ts', {
-    outDir: path.resolve(rootDir, 'public/build/'),
+    outDir: path.resolve(rootDir, 'public/assets/'),
     publicUrl: './',
   });
   await bundler.bundle();
